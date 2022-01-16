@@ -1,4 +1,6 @@
 # Spectral Transformer with Dynamic Spatial Sampling and Gaussian Positional Embedding for Hyperspectral Image Classification
-transformer-based method for HSI classification
-
+## Framework
 ![Alt text](./framework.png)
+## TODO
+1. Add article link 
+2. Upload code 
