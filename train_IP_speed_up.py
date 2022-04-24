@@ -14,7 +14,7 @@ from torch.backends import cudnn
 from models import *
 
 
-device = torch.device('cuda:{}'.format(0))
+device = torch.device('cuda:{}'.format(1))
 random.seed(7)
 torch.manual_seed(7)
 torch.cuda.manual_seed(7)
@@ -97,18 +97,21 @@ def chooose_train_and_test_point(train_data, test_data, true_data, num_classes):
     # return total_pos_train, total_pos_test, total_pos_true, number_train, number_test, number_true
     return total_pos_train, total_pos_test
 
-class HSIdata(torch.utils.data.Dataset):
-    def __init__(self, data, gt):
-        super(HSIdata, self).__init__()
+class HSI_SLIC_data(torch.utils.data.Dataset):
+    def __init__(self, data, gt, sr, patch_size=15):
+        super(HSI_SLIC_data, self).__init__()
         self.data = data
-
         self.label = gt - 1
-        self.patch_size = 15
+        self.sr = sr
+        self.stack = [1,-1,2,-2,3,-3,4,-4,5,-5]
+
+        self.patch_size = patch_size
         self.data_all_offset = np.zeros((data.shape[0] + self.patch_size - 1, self.data.shape[1] + self.patch_size - 1, self.data.shape[2]))
         self.seg_all_offset = np.zeros((data.shape[0] + self.patch_size - 1, self.data.shape[1] + self.patch_size - 1), dtype = np.int32)
         self.start = int((self.patch_size - 1) / 2)
         self.data_all_offset[self.start:data.shape[0] + self.start, self.start:data.shape[1] + self.start,:] = self.data[:, :, :]
         x_pos, y_pos = np.nonzero(gt)
+        
 
         self.indices = np.array([(x, y) for x, y in zip(x_pos, y_pos)])
         self.labels = [self.label[x, y] for x, y in self.indices]
@@ -120,20 +123,47 @@ class HSIdata(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         ###
-        x, y = self.indices[i]
+        center_x, center_y = self.indices[i]
+
+        ### get patch from SLIC segment_results
+        # step_1 find the superpixel that the pixel belongs
+        temp = self.sr.copy()
+        superpixel_id = temp[center_x,center_y]
+        temp[center_x,center_y] = -1
 
 
-        data = self.data_all_offset[x:x + self.patch_size, y:y + self.patch_size]
+        # step_2.1 if the num of superpixel is less then patch_size, add from neighbor
+        # super_x, super_y=np.where(self.sr==superpixel_id)
+        # num_of_superpixel = len(super_x)
+        # i=0
+        # while num_of_superpixel < self.patch_size and i <len(self.stack):
+        #     self.stack[i]
 
+        # data = self.data_all_offset[x:x + self.patch_size, y:y + self.patch_size]
 
-        label = self.label[x, y]
+        # step_2.2 if the num of superpixel is less then patch_size, reget from superpixel
+        super_x, super_y=np.where(temp==superpixel_id)
+        num_of_superpixel = len(super_x)
+        num_of_samples = self.patch_size*self.patch_size-1
+        times = num_of_samples//num_of_superpixel
+        remainder = num_of_samples%num_of_superpixel
+        superpixel_group = [(x, y) for x, y in zip(super_x, super_y)]
+        if times == 0:
+            sample_group = random.sample(superpixel_group, remainder)
+        else:
+            sample_group = [(x, y) for i in range(times) for x, y in zip(super_x, super_y)]
+            sample_group.extend(random.sample(superpixel_group, remainder))
+        sample_group.insert(num_of_samples//2,(center_x, center_y))
+
+        data = np.reshape([self.data[x,y,:] for x,y in sample_group],[self.patch_size,self.patch_size,-1])
+
+        label = self.label[center_x, center_y]
         data = np.asarray(data.transpose((2, 0, 1)), dtype='float32')
         label = np.asarray(label, dtype='int64')
         data = torch.from_numpy(data)
         label = torch.from_numpy(label)
 
-
-        return data, label, x, y
+        return data, label, center_x, center_y
 
 
 
@@ -182,7 +212,7 @@ def train(net, optimizer, critirian, data_loader, epoch, pre_epoch=1, pre_acc=0)
             acc_test = test(net, test_loader, e)
             if acc_test > bestacc:
                 bestacc = acc_test
-                save_model(net, 'transformer_normal_speed', 'IP', e,bestacc)
+                save_model(net, 'transformer_fast_speed', 'IP', e,bestacc)
         print('best_test_acc:', bestacc)
 
 
@@ -265,15 +295,15 @@ if __name__=="__main__":
 
 
 
-    
+    # train_dataset = HSI_SLIC_data(img, train_gt, sr)
     img = io.loadmat(folder+dataset['img'])['imageCube']
     sr = io.loadmat('Datasets/IndianPines/segmentation_results_200.mat')['segmentation_results']
-    train_dataset = HSIdata(img, train_gt)
+    train_dataset = HSI_SLIC_data(img, train_gt, sr)
     train_loader = torch.utils.data.DataLoader(train_dataset,
                                             batch_size=8,
                                             shuffle=True)
-    test_dataset = HSIdata(img, test_gt)                                         
-
+    test_dataset = HSI_SLIC_data(img, test_gt, sr)                                         
+    # test_dataset = HSI_SLIC_data(img, test_gt, sr)
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                             batch_size=100,# batch_size=512,
                                             shuffle=True)
@@ -291,17 +321,17 @@ if __name__=="__main__":
                     pool_method = 'mean')
 
 
-    # model_dir = './checkpoints/1494_0.869346.pth'
-    # base_net.load_state_dict(torch.load(model_dir))
-    # pre_epoch = 6494 + 1
-    # pre_acc = 0.869346
+    model_dir = './checkpoints/transformer_fast_speed/IP4011_0.749767.pth'
+    base_net.load_state_dict(torch.load(model_dir))
+    pre_epoch = 4011 + 1
+    pre_acc = 0.749767
 
-    pre_epoch = 1
-    pre_acc = 0
+    # pre_epoch = 1
+    # pre_acc = 0
 
     critirian = nn.CrossEntropyLoss().cuda()
-    lr = 0.005
-    epochs = 5000
+    lr = 0.0005
+    epochs = 1000
     print(lr)
     print(epochs)
     print("******************************")
@@ -314,3 +344,4 @@ if __name__=="__main__":
     train_acc_list = []
     test_acc_list = []
     train(base_net, optimizer, critirian, train_loader, epochs,pre_epoch,pre_acc)
+
