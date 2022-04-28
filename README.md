@@ -43,4 +43,4 @@ HSI cube is generated from superpixel region. It is time-consuming when generati
 
 ## TODO
 1. Add article link 
-2. Upload code (ing)
+2. Upload code (done)
