@@ -97,16 +97,24 @@ def chooose_train_and_test_point(train_data, test_data, true_data, num_classes):
     # return total_pos_train, total_pos_test, total_pos_true, number_train, number_test, number_true
     return total_pos_train, total_pos_test
 
-class HSI_SLIC_speedup_data(torch.utils.data.Dataset):
-    def __init__(self, data, gt, my_indices,patch_size=7):
-        super(HSI_SLIC_speedup_data, self).__init__()
+class HSI_SLIC_data(torch.utils.data.Dataset):
+    def __init__(self, data, gt, sr, patch_size=15):
+        super(HSI_SLIC_data, self).__init__()
         self.data = data
         self.label = gt - 1
+        self.sr = sr
+        self.stack = [1,-1,2,-2,3,-3,4,-4,5,-5]
+
         self.patch_size = patch_size
+        self.data_all_offset = np.zeros((data.shape[0] + self.patch_size - 1, self.data.shape[1] + self.patch_size - 1, self.data.shape[2]))
+        self.seg_all_offset = np.zeros((data.shape[0] + self.patch_size - 1, self.data.shape[1] + self.patch_size - 1), dtype = np.int32)
+        self.start = int((self.patch_size - 1) / 2)
+        self.data_all_offset[self.start:data.shape[0] + self.start, self.start:data.shape[1] + self.start,:] = self.data[:, :, :]
         x_pos, y_pos = np.nonzero(gt)
+        
+
         self.indices = np.array([(x, y) for x, y in zip(x_pos, y_pos)])
         self.labels = [self.label[x, y] for x, y in self.indices]
-        self.my_indices = my_indices
 
     #         np.random.shuffle(self.indices)
 
@@ -115,20 +123,48 @@ class HSI_SLIC_speedup_data(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         ###
-        x, y = self.indices[i]
+        center_x, center_y = self.indices[i]
 
-        temp_index = np.where((self.my_indices==self.indices[i]).all(axis=1))[0][0]
-        data = self.data[temp_index,:,:,:]
+        ### get patch from SLIC segment_results
+        # step_1 find the superpixel that the pixel belongs
+        temp = self.sr.copy()
+        superpixel_id = temp[center_x,center_y]
+        temp[center_x,center_y] = -1
 
 
-        label = self.label[x, y]
+        # step_2.1 if the num of superpixel is less then patch_size, add from neighbor
+        # super_x, super_y=np.where(self.sr==superpixel_id)
+        # num_of_superpixel = len(super_x)
+        # i=0
+        # while num_of_superpixel < self.patch_size and i <len(self.stack):
+        #     self.stack[i]
+
+        # data = self.data_all_offset[x:x + self.patch_size, y:y + self.patch_size]
+
+        # step_2.2 if the num of superpixel is less then patch_size, reget from superpixel
+        super_x, super_y=np.where(temp==superpixel_id)
+        num_of_superpixel = len(super_x)
+        num_of_samples = self.patch_size*self.patch_size-1
+        times = num_of_samples//num_of_superpixel
+        remainder = num_of_samples%num_of_superpixel
+        superpixel_group = [(x, y) for x, y in zip(super_x, super_y)]
+        if times == 0:
+            sample_group = random.sample(superpixel_group, remainder)
+        else:
+            sample_group = [(x, y) for i in range(times) for x, y in zip(super_x, super_y)]
+            sample_group.extend(random.sample(superpixel_group, remainder))
+        sample_group.insert(num_of_samples//2,(center_x, center_y))
+
+        data = np.reshape([self.data[x,y,:] for x,y in sample_group],[self.patch_size,self.patch_size,-1])
+
+        label = self.label[center_x, center_y]
         data = np.asarray(data.transpose((2, 0, 1)), dtype='float32')
         label = np.asarray(label, dtype='int64')
         data = torch.from_numpy(data)
         label = torch.from_numpy(label)
 
-        # print(label)
-        return data, label, x, y
+        return data, label, center_x, center_y
+
 
 
 def save_model(model, model_name, dataset_name, epoch,acc):
@@ -224,8 +260,8 @@ if __name__=="__main__":
     print(folder)
     img = io.loadmat(folder+dataset['img'])['imageCube']# Load image to numpy.ndarray
     # ['indian_pines_corrected']
-    # img = (img - np.min(img))/(np.max(img)-np.min(img))     # Normalization
-    # print(type(img),img.shape)
+    img = (img - np.min(img))/(np.max(img)-np.min(img))     # Normalization
+    print(type(img),img.shape)
     gt = io.loadmat(folder + dataset['gt'])['groundTruth']
 
     N_CLASSES = len(label_values)
@@ -261,18 +297,12 @@ if __name__=="__main__":
 
     # train_dataset = HSI_SLIC_data(img, train_gt, sr)
     # img = io.loadmat(folder+dataset['img'])['imageCube']
-    # sr = io.loadmat('Datasets/IndianPines/segmentation_results_200.mat')['segmentation_results']
-
-    
-
-    data = np.load('SLIC_samples.npy')
-    my_indices = np.load('indices.npy')
-
-    train_dataset = HSI_SLIC_speedup_data(data, train_gt, my_indices,patch_size=15)
+    sr = io.loadmat('Datasets/IndianPines/segmentation_results_200.mat')['segmentation_results']
+    train_dataset = HSI_SLIC_data(img, train_gt, sr)
     train_loader = torch.utils.data.DataLoader(train_dataset,
                                             batch_size=8,
                                             shuffle=True)
-    test_dataset = HSI_SLIC_speedup_data(data, test_gt, my_indices,patch_size=15)                                         
+    test_dataset = HSI_SLIC_data(img, test_gt, sr)                                         
     # test_dataset = HSI_SLIC_data(img, test_gt, sr)
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                             batch_size=100,# batch_size=512,

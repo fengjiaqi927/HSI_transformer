@@ -16,43 +16,12 @@ np.random.seed(7)
 cudnn.deterministic = True
 from operator import truediv
 
-# import os
-# os.environ["CUDA_VISIBLE_DEVICES"]='1'
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]='1'
 
 device = "cuda:0"
 
-class HSI_SLIC_speedup_data(torch.utils.data.Dataset):
-    def __init__(self, data, gt, my_indices,patch_size=7):
-        super(HSI_SLIC_speedup_data, self).__init__()
-        self.data = data
-        self.label = gt - 1
-        self.patch_size = patch_size
-        x_pos, y_pos = np.nonzero(gt)
-        self.indices = np.array([(x, y) for x, y in zip(x_pos, y_pos)])
-        self.labels = [self.label[x, y] for x, y in self.indices]
-        self.my_indices = my_indices
-
-    #         np.random.shuffle(self.indices)
-
-    def __len__(self):
-        return len(self.indices)
-
-    def __getitem__(self, i):
-        ###
-        x, y = self.indices[i]
-
-        temp_index = np.where((self.my_indices==self.indices[i]).all(axis=1))[0][0]
-        data = self.data[temp_index,:,:,:]
-
-
-        label = self.label[x, y]
-        data = np.asarray(data.transpose((2, 0, 1)), dtype='float32')
-        label = np.asarray(label, dtype='int64')
-        data = torch.from_numpy(data)
-        label = torch.from_numpy(label)
-
-
-        return data, label, x, y
+from train_IP_speed_normal import HSI_SLIC_data
 
 def AA_andEachClassAccuracy(confusion_matrix):
     counter = confusion_matrix.shape[0]
@@ -162,7 +131,7 @@ def chooose_train_and_test_point(train_data, test_data, true_data, num_classes):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--model", default = '/home/fengjq/2grade/HSI_classification/HSI_transformer/checkpoints/transformer_fast_speed/IP/6661_0.927825.pth')
+    parser.add_argument("--model", default = './checkpoints/4981_0.907145.pth')
     parser.add_argument('--img_dir', default= './result.png')
     args = parser.parse_args()
     net = spectral_attention(patch_size = 3, # HSI channel merge size 
@@ -207,12 +176,17 @@ if __name__ == "__main__":
     test_indices = list(zip(*total_pos_test))
     
 
-
-    data = np.load('SLIC_samples.npy')
-    my_indices = np.load('indices.npy') 
+  
 
     test_gt[test_indices] = gt[test_indices]
-    test_dataset = HSI_SLIC_speedup_data(data, test_gt, my_indices,patch_size=15)                                         
+
+    img = io.loadmat('./Datasets/IndianPines/IndianPines.mat')['imageCube']# Load image to numpy.ndarray
+    # ['indian_pines_corrected']
+    img = (img - np.min(img))/(np.max(img)-np.min(img))     # Normalization
+
+    
+    sr = io.loadmat('Datasets/IndianPines/segmentation_results_200.mat')['segmentation_results']
+    test_dataset = HSI_SLIC_data(img, test_gt, sr)                                     
     # test_dataset = HSI_SLIC_data(img, test_gt, sr)
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                           batch_size=100,# batch_size=512,

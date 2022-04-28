@@ -28,4 +28,4 @@ test:   `python test_IP_speed_up.py`
 
 ## TODO
 1. Add article link 
-2. Upload code 
+2. Upload code (ing)
