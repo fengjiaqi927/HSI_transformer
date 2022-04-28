@@ -14,17 +14,25 @@
 HSI cube is generated from superpixel region. It is time-consuming when generating in each batch. To speed up the dataload process, we generate the HSI cube before training network and all cube is storaged in SLIC_samples.npy.
 
 ## Usage
-1. normal version
+1. normal cube generation version
 
-train:  `python train_IP_normal.py`
+    train:  `python train_IP_normal.py`
 
-test:   `python test_IP_normal.py`
+    test:   `python test_IP_normal.py`
 
-2. speed up version
+2. cube generated from superpixel region
+    
+    2.1 generate while training
 
-train:  `python train_IP_speed_up.py`
+    train:  `python train_IP_speed_normal.py`
 
-test:   `python test_IP_speed_up.py`
+    test:   `python test_IP_speed_normal.py`
+
+    2.2 generate before training
+
+    train:  `python train_IP_speed_up.py`
+
+    test:   `python test_IP_speed_up.py`
 
 ## TODO
 1. Add article link 
