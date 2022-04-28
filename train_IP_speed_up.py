@@ -296,7 +296,7 @@ if __name__=="__main__":
 
 
     # train_dataset = HSI_SLIC_data(img, train_gt, sr)
-    img = io.loadmat(folder+dataset['img'])['imageCube']
+    # img = io.loadmat(folder+dataset['img'])['imageCube']
     sr = io.loadmat('Datasets/IndianPines/segmentation_results_200.mat')['segmentation_results']
     train_dataset = HSI_SLIC_data(img, train_gt, sr)
     train_loader = torch.utils.data.DataLoader(train_dataset,
@@ -321,13 +321,13 @@ if __name__=="__main__":
                     pool_method = 'mean')
 
 
-    model_dir = './checkpoints/transformer_fast_speed/IP4011_0.749767.pth'
-    base_net.load_state_dict(torch.load(model_dir))
-    pre_epoch = 4011 + 1
-    pre_acc = 0.749767
+    # model_dir = './checkpoints/transformer_fast_speed/IP/1761_0.846448.pth'
+    # base_net.load_state_dict(torch.load(model_dir))
+    # pre_epoch = 1761 + 1
+    # pre_acc = 0.846448
 
-    # pre_epoch = 1
-    # pre_acc = 0
+    pre_epoch = 1
+    pre_acc = 0
 
     critirian = nn.CrossEntropyLoss().cuda()
     lr = 0.0005
@@ -336,7 +336,7 @@ if __name__=="__main__":
     print(epochs)
     print("******************************")
 
-    optimizer = torch.optim.SGD(base_net.parameters(), lr = lr, weight_decay=0.0001)
+    optimizer = torch.optim.SGD(base_net.parameters(), lr = lr, momentum=0.7, weight_decay=0.00001)
 
     best_acc = 0
     kappa = 0
