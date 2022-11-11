@@ -1,4 +1,4 @@
-# Spectral Transformer with Dynamic Spatial Sampling and Gaussian Positional Embedding for Hyperspectral Image Classification
+# [Spectral Transformer with Dynamic Spatial Sampling and Gaussian Positional Embedding for Hyperspectral Image Classification](https://ieeexplore.ieee.org/abstract/document/9883118)
 ## Framework
 ![Alt text](./framework.png)
 
@@ -42,5 +42,5 @@ HSI cube is generated from superpixel region. It is time-consuming when generati
     test:   `python test_IP_speed_up.py`
 
 ## TODO
-1. Add article link 
+1. Add article link (done)
 2. Upload code (done)
